@@ -6,10 +6,10 @@ toolchain go1.22.4
 
 require (
 	github.com/go-ole/go-ole v1.3.0
-	github.com/metacubex/gvisor v0.0.0-20240320004321-933faba989ec
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	golang.org/x/net v0.26.0
 	golang.org/x/sys v0.21.0
+	gvisor.dev/gvisor v0.0.0-20240622015726-dfeb44ecf5ac
 )
 
 require (

@@ -16,10 +16,6 @@ type Metadata struct {
 	Destination netip.AddrPort
 }
 
-func (md *Metadata) Src() string { return md.Source.String() }
-
-func (md *Metadata) Dst() string { return md.Destination.String() }
-
 type TCPConnectionHandler interface {
 	HandleTCPConnection(net.Conn, Metadata) error
 }

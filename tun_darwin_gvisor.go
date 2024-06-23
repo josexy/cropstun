@@ -4,10 +4,10 @@ package tun
 
 import (
 	"github.com/josexy/cropstun/common/bufio"
-	"github.com/metacubex/gvisor/pkg/buffer"
-	"github.com/metacubex/gvisor/pkg/tcpip"
-	"github.com/metacubex/gvisor/pkg/tcpip/header"
-	"github.com/metacubex/gvisor/pkg/tcpip/stack"
+	"gvisor.dev/gvisor/pkg/buffer"
+	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/header"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
 var _ GVisorTun = (*NativeTun)(nil)
@@ -25,6 +25,13 @@ type DarwinEndpoint struct {
 
 func (e *DarwinEndpoint) MTU() uint32 {
 	return e.tun.mtu
+}
+
+func (e *DarwinEndpoint) Close() {
+	_ = e.tun.Close()
+}
+
+func (e *DarwinEndpoint) SetLinkAddress(addr tcpip.LinkAddress) {
 }
 
 func (e *DarwinEndpoint) MaxHeaderLength() uint16 {

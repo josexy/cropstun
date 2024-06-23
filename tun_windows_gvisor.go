@@ -3,10 +3,10 @@
 package tun
 
 import (
-	"github.com/metacubex/gvisor/pkg/buffer"
-	"github.com/metacubex/gvisor/pkg/tcpip"
-	"github.com/metacubex/gvisor/pkg/tcpip/header"
-	"github.com/metacubex/gvisor/pkg/tcpip/stack"
+	"gvisor.dev/gvisor/pkg/buffer"
+	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/header"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
 var _ GVisorTun = (*NativeTun)(nil)
@@ -24,6 +24,13 @@ type WintunEndpoint struct {
 
 func (e *WintunEndpoint) MTU() uint32 {
 	return e.tun.options.MTU
+}
+
+func (e *WintunEndpoint) Close() {
+	_ = e.tun.Close()
+}
+
+func (e *WintunEndpoint) SetLinkAddress(addr tcpip.LinkAddress) {
 }
 
 func (e *WintunEndpoint) MaxHeaderLength() uint16 {

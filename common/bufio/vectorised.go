@@ -7,7 +7,6 @@ import (
 
 	"github.com/josexy/cropstun/common"
 	"github.com/josexy/cropstun/common/buf"
-	M "github.com/josexy/cropstun/common/metadata"
 	N "github.com/josexy/cropstun/common/network"
 )
 
@@ -30,21 +29,6 @@ func CreateVectorisedWriter(writer any) (N.VectorisedWriter, bool) {
 		}
 	case syscall.RawConn:
 		return &SyscallVectorisedWriter{upstream: writer, rawConn: w}, true
-	}
-	return nil, false
-}
-
-func CreateVectorisedPacketWriter(writer any) (N.VectorisedPacketWriter, bool) {
-	switch w := writer.(type) {
-	case N.VectorisedPacketWriter:
-		return w, true
-	case syscall.Conn:
-		rawConn, err := w.SyscallConn()
-		if err == nil {
-			return &SyscallVectorisedPacketWriter{upstream: writer, rawConn: rawConn}, true
-		}
-	case syscall.RawConn:
-		return &SyscallVectorisedPacketWriter{upstream: writer, rawConn: w}, true
 	}
 	return nil, false
 }
@@ -95,24 +79,6 @@ type SyscallVectorisedWriter struct {
 	syscallVectorisedWriterFields
 }
 
-var _ N.VectorisedPacketWriter = (*SyscallVectorisedPacketWriter)(nil)
-
-type SyscallVectorisedPacketWriter struct {
-	upstream any
-	rawConn  syscall.RawConn
-	syscallVectorisedWriterFields
-}
-
-var _ N.VectorisedPacketWriter = (*UnbindVectorisedPacketWriter)(nil)
-
-type UnbindVectorisedPacketWriter struct {
-	N.VectorisedWriter
-}
-
-func (w *UnbindVectorisedPacketWriter) WriteVectorisedPacket(buffers []*buf.Buffer, _ M.Socksaddr) error {
-	return w.WriteVectorised(buffers)
-}
-
 func WriteVectorised(writer N.VectorisedWriter, data [][]byte) (n int, err error) {
 	var dataLen int
 	buffers := make([]*buf.Buffer, 0, len(data))
@@ -121,20 +87,6 @@ func WriteVectorised(writer N.VectorisedWriter, data [][]byte) (n int, err error
 		buffers = append(buffers, buf.As(p))
 	}
 	err = writer.WriteVectorised(buffers)
-	if err == nil {
-		n = dataLen
-	}
-	return
-}
-
-func WriteVectorisedPacket(writer N.VectorisedPacketWriter, data [][]byte, destination M.Socksaddr) (n int, err error) {
-	var dataLen int
-	buffers := make([]*buf.Buffer, 0, len(data))
-	for _, p := range data {
-		dataLen += len(p)
-		buffers = append(buffers, buf.As(p))
-	}
-	err = writer.WriteVectorisedPacket(buffers, destination)
 	if err == nil {
 		n = dataLen
 	}

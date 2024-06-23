@@ -7,16 +7,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/metacubex/gvisor/pkg/tcpip"
-	"github.com/metacubex/gvisor/pkg/tcpip/adapters/gonet"
-	"github.com/metacubex/gvisor/pkg/tcpip/header"
-	"github.com/metacubex/gvisor/pkg/tcpip/network/ipv4"
-	"github.com/metacubex/gvisor/pkg/tcpip/network/ipv6"
-	"github.com/metacubex/gvisor/pkg/tcpip/stack"
-	"github.com/metacubex/gvisor/pkg/tcpip/transport/icmp"
-	"github.com/metacubex/gvisor/pkg/tcpip/transport/tcp"
-	"github.com/metacubex/gvisor/pkg/tcpip/transport/udp"
-	"github.com/metacubex/gvisor/pkg/waiter"
+	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
+	"gvisor.dev/gvisor/pkg/tcpip/header"
+	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
+	"gvisor.dev/gvisor/pkg/tcpip/network/ipv6"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
+	"gvisor.dev/gvisor/pkg/tcpip/transport/icmp"
+	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
+	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
+	"gvisor.dev/gvisor/pkg/waiter"
 )
 
 const defaultNIC tcpip.NICID = 1
@@ -44,11 +44,10 @@ func (c *udpOnceCloser) Close() error {
 }
 
 type GVisor struct {
-	tun           GVisorTun
-	broadcastAddr netip.Addr
-	handler       Handler
-	stack         *stack.Stack
-	endpoint      stack.LinkEndpoint
+	tun      GVisorTun
+	handler  Handler
+	stack    *stack.Stack
+	endpoint stack.LinkEndpoint
 }
 
 type GVisorTun interface {
@@ -56,11 +55,10 @@ type GVisorTun interface {
 	NewEndpoint() (stack.LinkEndpoint, error)
 }
 
-func NewGVisor(options StackOptions) (Stack, error) {
+func newGVisor(options StackOptions) (Stack, error) {
 	gStack := &GVisor{
-		tun:           options.Tun.(GVisorTun),
-		broadcastAddr: BroadcastAddr(options.TunOptions.Inet4Address),
-		handler:       options.Handler,
+		tun:     options.Tun.(GVisorTun),
+		handler: options.Handler,
 	}
 	return gStack, nil
 }
@@ -154,6 +152,7 @@ func (t *GVisor) Close() error {
 	for _, endpoint := range t.stack.CleanupEndpoints() {
 		endpoint.Abort()
 	}
+	t.tun.Close()
 	return nil
 }
 
