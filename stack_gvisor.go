@@ -2,8 +2,6 @@ package tun
 
 import (
 	"errors"
-	"fmt"
-	"log"
 	"net"
 	"net/netip"
 	"sync"
@@ -78,9 +76,7 @@ func (t *GVisor) Start() error {
 	}
 	tcpForwarder := tcp.NewForwarder(ipStack, 0, 1024, func(r *tcp.ForwarderRequest) {
 		var wq waiter.Queue
-		log.Println("tcp before", r.ID())
 		endpoint, err := r.CreateEndpoint(&wq)
-		log.Println("tcp after", r.ID())
 		if err != nil {
 			r.Complete(true)
 			return
@@ -117,7 +113,6 @@ func (t *GVisor) Start() error {
 	ipStack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
 
 	udpForwarder := udp.NewForwarder(ipStack, func(request *udp.ForwarderRequest) {
-		fmt.Println("udp", request.ID())
 		var wq waiter.Queue
 		endpoint, err := request.CreateEndpoint(&wq)
 		if err != nil {
