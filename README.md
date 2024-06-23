@@ -1,8 +1,8 @@
-# sing-tun
+# cropped for sing-tun
 
-Simple transparent proxy library.
+This project is based on the [sing-tun](https://github.com/SagerNet/sing-tun) project, with a lot of cuts and streamlining. Only the `gVisor` mode has been retained and made more generic.
 
-For Linux, Windows, macOS.
+Due to the removal of many customizations and some referenced code, it is for personal use only, and only supports Linux, macOS and Windows.
 
 ## License
 
