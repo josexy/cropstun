@@ -21,7 +21,7 @@ func TestBindToDeviceForTCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.Println(ifaceName)
-	if err := BindToDeviceForConn(ifaceName, &dialer, "tcp4", addr); err != nil {
+	if err := BindToDeviceForConn(ifaceName, &dialer, "tcp", addr); err != nil {
 		t.Fatal(err)
 	}
 	client := &http.Client{Transport: &http.Transport{DialContext: dialer.DialContext}}
@@ -33,7 +33,7 @@ func TestBindToDeviceForTCP(t *testing.T) {
 	log.Println(resp.StatusCode)
 	log.Println(resp.Header)
 
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 1)
 }
 
 func TestBindToDeviceForUDP(t *testing.T) {
@@ -44,18 +44,40 @@ func TestBindToDeviceForUDP(t *testing.T) {
 	}
 	log.Println(ifaceName)
 
-	addr, err := BindToDeviceForPacket(ifaceName, &lc, "udp4", "")
+	go func() {
+		var lc net.ListenConfig
+		conn, _ := lc.ListenPacket(context.Background(), "udp", ":2003")
+		defer conn.Close()
+		buf := make([]byte, 1024)
+		for {
+			n, addr, err := conn.ReadFrom(buf)
+			if err != nil {
+				break
+			}
+			conn.WriteTo(buf[:n], addr)
+		}
+	}()
+
+	addr, err := BindToDeviceForPacket(ifaceName, &lc, "udp", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	conn, err := lc.ListenPacket(context.Background(), "udp", addr)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
+
+	time.Sleep(time.Millisecond * 50)
 	buf := make([]byte, 1024)
-	targetAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:2003")
+
+	var targetIP string
+	ifaceObj, err := iface.GetInterfaceByName(ifaceName)
+	if err == nil && ifaceObj != nil && len(ifaceObj.Addrs) > 0 {
+		targetIP = ifaceObj.Addrs[0].Addr().String()
+	}
+	targetAddr, _ := net.ResolveUDPAddr("udp", targetIP+":2003")
+
 	index := 0
 	for {
 		conn.WriteTo([]byte("hello"), targetAddr)
@@ -70,5 +92,5 @@ func TestBindToDeviceForUDP(t *testing.T) {
 		}
 	}
 
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 1)
 }

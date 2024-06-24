@@ -1,9 +1,8 @@
-//go:build !darwin && !linux
+//go:build !darwin && !linux && !windows
 
 package bind
 
 import (
-	"errors"
 	"net"
 	"net/netip"
 	"strconv"
@@ -35,7 +34,7 @@ func lookupLocalAddr(ifaceName string, network string, dst netip.Addr, port uint
 		}
 	}
 	if !addr.IsValid() {
-		return netip.AddrPort{}, errors.New("invalid ip address")
+		return netip.AddrPort{}, ErrInvalidIPAddr
 	}
 	return netip.AddrPortFrom(addr, uint16(port)), nil
 }
@@ -73,7 +72,6 @@ func bindToDeviceForConn(ifaceName string, dialer *net.Dialer, network string, d
 		}
 	}
 
-	// bind outbound interface address
 	dialer.LocalAddr = addr
 	return nil
 }
@@ -85,7 +83,6 @@ func bindToDeviceForPacket(ifaceName string, _ *net.ListenConfig, network, addre
 	}
 
 	localPort, _ := strconv.ParseUint(port, 10, 16)
-
 	addr, err := lookupLocalAddr(ifaceName, network, netip.Addr{}, uint16(localPort))
 	if err != nil {
 		return "", err

@@ -1,6 +1,7 @@
 package bind
 
 import (
+	"context"
 	"net"
 	"net/netip"
 	"syscall"
@@ -8,21 +9,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-type controlFn func(network, address string, c syscall.RawConn) error
-
-func setupControl(ifaceName string, nextChain controlFn) controlFn {
-	return func(network, address string, c syscall.RawConn) (err error) {
-		defer func() {
-			if err == nil && nextChain != nil {
-				err = nextChain(network, address, c)
-			}
-		}()
-
-		ipStr, _, err := net.SplitHostPort(address)
-		if err == nil {
-			if ip, err := netip.ParseAddr(ipStr); err == nil && !ip.IsGlobalUnicast() {
-				return err
-			}
+func setupControl(ifaceName string) controlFn {
+	return func(ctx context.Context, network, address string, c syscall.RawConn) (err error) {
+		addrPort, err := netip.ParseAddrPort(address)
+		if err == nil && !addrPort.Addr().IsGlobalUnicast() {
+			return
 		}
 
 		var innerErr error
@@ -37,11 +28,11 @@ func setupControl(ifaceName string, nextChain controlFn) controlFn {
 }
 
 func bindToDeviceForConn(ifaceName string, dialer *net.Dialer, _ string, _ netip.Addr) error {
-	dialer.Control = setupControl(ifaceName, dialer.Control)
+	addControlToDialer(dialer, setupControl(ifaceName))
 	return nil
 }
 
 func bindToDeviceForPacket(ifaceName string, lc *net.ListenConfig, _, address string) (string, error) {
-	lc.Control = setupControl(ifaceName, lc.Control)
+	addControlToListenConfig(lc, setupControl(ifaceName))
 	return address, nil
 }
