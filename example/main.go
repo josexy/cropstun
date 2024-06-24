@@ -9,13 +9,12 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
 	tun "github.com/josexy/cropstun"
 	"github.com/josexy/cropstun/bind"
-	"github.com/josexy/cropstun/iface"
+	"github.com/josexy/cropstun/route"
 )
 
 var (
@@ -29,28 +28,28 @@ var _ tun.Handler = (*myHandler)(nil)
 type myHandler struct{}
 
 func tunnel(dst, src io.ReadWriteCloser) {
-	var wg sync.WaitGroup
-	wg.Add(2)
+	errCh := make(chan error, 2)
+	defer dst.Close()
+	defer src.Close()
 	fn := func(dest, src io.ReadWriteCloser) {
-		defer wg.Done()
-		_, _ = io.Copy(dest, src)
-		_ = dest.Close()
+		_, err := io.Copy(dest, src)
+		errCh <- err
 	}
 	go fn(dst, src)
 	go fn(src, dst)
-	wg.Wait()
+	<-errCh
 }
 
 func (*myHandler) HandleTCPConnection(conn net.Conn, info tun.Metadata) error {
 	log.Printf("tcp, src: %s, dst: %s", info.Source, info.Destination)
 	dialer := net.Dialer{Timeout: time.Second * 10}
-	name, err := iface.DefaultRouteInterface()
+	defaultRoute, err := route.DefaultRouteInterface()
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 	// bind an outbound interface to avoid routing loops
-	if err := bind.BindToDeviceForConn(name, &dialer, "tcp4", info.Destination.Addr()); err != nil {
+	if err := bind.BindToDeviceForConn(defaultRoute.InterfaceName, &dialer, "tcp4", info.Destination.Addr()); err != nil {
 		log.Println(err)
 		return err
 	}
@@ -59,7 +58,6 @@ func (*myHandler) HandleTCPConnection(conn net.Conn, info tun.Metadata) error {
 		log.Println(err)
 		return err
 	}
-	defer target.Close()
 	tunnel(target, conn)
 	return nil
 }
@@ -82,10 +80,7 @@ func main() {
 
 	log.Println(tunName, tunCIDR, remoteAddr)
 
-	tunOpt := &tun.Options{
-		Name: tunName,
-		MTU:  1500,
-	}
+	tunOpt := new(tun.Options)
 	tunIf, err := tun.NewTunDevice([]netip.Prefix{netip.MustParsePrefix(tunCIDR)}, tunOpt)
 	if err != nil {
 		log.Fatal(err)

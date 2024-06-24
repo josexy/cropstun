@@ -1,24 +1,20 @@
-package iface
+package route
 
 import (
-	"errors"
-	"fmt"
+	"net"
 	"syscall"
 
 	"golang.org/x/net/route"
 )
 
-// TODO: Deprecated
-func DefaultRouteInterface() (string, error) {
-	// or return ExeShell("route -n get default | grep 'interface' | awk 'NR==1{print $2}'")
-
+func DefaultRouteInterface() (*Route, error) {
 	rib, err := route.FetchRIB(syscall.AF_UNSPEC, syscall.NET_RT_DUMP2, 0)
 	if err != nil {
-		return "", fmt.Errorf("route.FetchRIB: %w", err)
+		return nil, err
 	}
 	msgs, err := route.ParseRIB(syscall.NET_RT_IFLIST2, rib)
 	if err != nil {
-		return "", fmt.Errorf("route.ParseRIB: %w", err)
+		return nil, err
 	}
 	for _, message := range msgs {
 		routeMessage := message.(*route.RouteMessage)
@@ -30,18 +26,20 @@ func DefaultRouteInterface() (string, error) {
 		if !ok {
 			continue
 		}
-		// default route
 		if destination.IP != [4]byte{0, 0, 0, 0} {
 			continue
 		}
-		// interface index
 		if _, ok := addresses[1].(*route.Inet4Addr); ok {
-			// ok
-			if iface, err := GetInterfaceByIndex(routeMessage.Index); err == nil {
-				return iface.Name, nil
+			if iface, err := net.InterfaceByIndex(routeMessage.Index); err == nil {
+				return &Route{
+					InterfaceName:  iface.Name,
+					InterfaceIndex: iface.Index,
+				}, nil
+			} else {
+				return nil, err
 			}
 		}
 	}
 
-	return "", errors.New("ambiguous gateway interfaces found")
+	return nil, ErrNoRoute
 }

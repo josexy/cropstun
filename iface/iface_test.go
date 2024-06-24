@@ -5,37 +5,14 @@ import (
 	"testing"
 )
 
-func getDefaultIface(t *testing.T) *Interface {
-	ifaceName, err := DefaultRouteInterface()
-	if err != nil {
-		t.Fatal(err)
-	}
-	iface, err := GetInterfaceByName(ifaceName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return iface
-}
-
 func TestResolveAllInterfaces(t *testing.T) {
-	for name, iface := range record {
+	list := GetAllInterfaces()
+	for name, iface := range list {
 		t.Log(name, iface)
 	}
 }
 
-func TestDefaultRouteInterface(t *testing.T) {
-	iface := getDefaultIface(t)
-	t.Log(iface)
-
-	iface, err := GetInterfaceByIndex(iface.Index)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(iface)
-}
-
 func TestPickIPv4Addr(t *testing.T) {
-	iface := getDefaultIface(t)
 
 	addrs := []string{
 		"198.170.10.196",
@@ -48,17 +25,20 @@ func TestPickIPv4Addr(t *testing.T) {
 		"215.73.0.150",
 		"190.3.75.199",
 		"121.50.82.32",
+		"172.31.77.7",
+		"172.17.0.100",
 	}
 
-	for _, addr := range addrs {
-		addr := iface.PickIPv4Addr(netip.MustParseAddr(addr))
-		t.Log(addr)
+	ifaces := GetAllInterfaces()
+	for _, iface := range ifaces {
+		for _, addr := range addrs {
+			addr := iface.PickIPv4Addr(netip.MustParseAddr(addr))
+			t.Log(iface.Name, addr)
+		}
 	}
 }
 
 func TestPickIPv6Addr(t *testing.T) {
-	iface := getDefaultIface(t)
-
 	addrs := []string{
 		"2DB6:E5E5:7691:8054:279C:EE04:F5FA:A1A9",
 		"594A:2C88:5AA9:2057:C1F3:17B3:539C:A030",
@@ -72,8 +52,11 @@ func TestPickIPv6Addr(t *testing.T) {
 		"3EF8:C409:334C:604E:AB27:FA51:ACF8:63B9",
 	}
 
-	for _, addr := range addrs {
-		addr := iface.PickIPv6Addr(netip.MustParseAddr(addr))
-		t.Log(addr)
+	ifaces := GetAllInterfaces()
+	for _, iface := range ifaces {
+		for _, addr := range addrs {
+			addr := iface.PickIPv6Addr(netip.MustParseAddr(addr))
+			t.Log(iface.Name, addr)
+		}
 	}
 }

@@ -8,24 +8,22 @@ import (
 )
 
 var (
-	once    sync.Once
-	onceErr error
-	record  map[string]*Interface
+	mu     sync.RWMutex
+	record map[string]*Interface
 )
 
 type Interface struct {
 	Index        int
 	Name         string
+	MTU          int
 	Addrs        []netip.Prefix
+	Addrsv4      []netip.Prefix
+	Addrsv6      []netip.Prefix
 	HardwareAddr net.HardwareAddr
-	hasIPv4Addr  bool
 }
 
 func init() {
-	resolveAllInterfaces()
-	if onceErr != nil {
-		panic(onceErr)
-	}
+	_ = FlushAllInterfaces()
 }
 
 func (iface *Interface) PickIPv4Addr(dst netip.Addr) netip.Addr {
@@ -71,6 +69,8 @@ func (iface *Interface) pickIPAddr(dst netip.Addr, accept func(addr netip.Prefix
 }
 
 func GetInterfaceByIndex(index int) (*Interface, error) {
+	mu.RLock()
+	defer mu.RUnlock()
 	for _, iface := range record {
 		if iface.Index == index {
 			return iface, nil
@@ -80,51 +80,74 @@ func GetInterfaceByIndex(index int) (*Interface, error) {
 }
 
 func GetInterfaceByName(name string) (*Interface, error) {
+	mu.RLock()
+	defer mu.RUnlock()
 	if iface, ok := record[name]; ok {
 		return iface, nil
 	}
 	return nil, fmt.Errorf("interface name %q not found", name)
 }
 
-func GetInterfaceNames() (list []string) {
-	for k, v := range record {
-		if v.hasIPv4Addr {
-			list = append(list, k)
-		}
+func GetAllInterfaceNames() (list []string) {
+	mu.RLock()
+	defer mu.RUnlock()
+	for k := range record {
+		list = append(list, k)
 	}
 	return
 }
 
-func resolveAllInterfaces() {
-	once.Do(func() {
+func GetAllInterfaces() (list []*Interface) {
+	mu.RLock()
+	defer mu.RUnlock()
+	for _, v := range record {
+		list = append(list, v)
+	}
+	return
+}
+
+func FlushAllInterfaces() error {
+	mu.Lock()
+	defer mu.Unlock()
+	if record == nil {
 		record = make(map[string]*Interface)
-		ifaces, err := net.Interfaces()
-		if err != nil {
-			onceErr = err
-			return
+	}
+	clear(record)
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return err
+	}
+
+	for _, iface := range ifaces {
+		addrs, err := iface.Addrs()
+		if err != nil || len(addrs) == 0 {
+			continue
 		}
-		for _, iface := range ifaces {
-			addrs, err := iface.Addrs()
-			onceErr = err
-			if err != nil || len(addrs) == 0 {
+		var cidrsv4, cidrsv6 []netip.Prefix
+		for _, addr := range addrs {
+			prefix, err := netip.ParsePrefix(addr.String())
+			if err != nil {
 				continue
 			}
-			ipNets := make([]netip.Prefix, 0, len(addrs))
-			hasIPv4Addr := false
-			for _, addr := range addrs {
-				ipNet := netip.MustParsePrefix(addr.String())
-				if ipNet.Addr().Is4() {
-					hasIPv4Addr = true
-				}
-				ipNets = append(ipNets, ipNet)
-			}
-			record[iface.Name] = &Interface{
-				Index:        iface.Index,
-				Name:         iface.Name,
-				Addrs:        ipNets,
-				HardwareAddr: iface.HardwareAddr,
-				hasIPv4Addr:  hasIPv4Addr,
+			if prefix.Addr().Is4() {
+				cidrsv4 = append(cidrsv4, prefix)
+			} else {
+				cidrsv6 = append(cidrsv6, prefix)
 			}
 		}
-	})
+		allcidrs := make([]netip.Prefix, 0, len(cidrsv4)+len(cidrsv6))
+		allcidrs = append(allcidrs, cidrsv4...)
+		allcidrs = append(allcidrs, cidrsv6...)
+		record[iface.Name] = &Interface{
+			Index:        iface.Index,
+			Name:         iface.Name,
+			MTU:          iface.MTU,
+			Addrs:        allcidrs,
+			Addrsv4:      cidrsv4,
+			Addrsv6:      cidrsv6,
+			HardwareAddr: iface.HardwareAddr,
+		}
+	}
+	return nil
 }
