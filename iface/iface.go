@@ -101,9 +101,7 @@ func GetAllInterfaces() (list []*Interface) {
 	mu.RLock()
 	defer mu.RUnlock()
 	for _, v := range record {
-		niface := *v
-		niface.HardwareAddr = append([]byte(nil), niface.HardwareAddr...)
-		list = append(list, &niface)
+		list = append(list, v)
 	}
 	return
 }

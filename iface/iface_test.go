@@ -5,38 +5,11 @@ import (
 	"testing"
 )
 
-func getDefaultIface(t *testing.T) *Interface {
-	ifaceName, err := DefaultRouteInterface()
-	if err != nil {
-		t.Fatal(err)
-	}
-	iface, err := GetInterfaceByName(ifaceName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return iface
-}
-
 func TestResolveAllInterfaces(t *testing.T) {
 	list := GetAllInterfaces()
 	for name, iface := range list {
 		t.Log(name, iface)
 	}
-}
-
-func TestInterfaces(t *testing.T) {
-	iface := getDefaultIface(t)
-	t.Log(iface)
-
-	iface, err := GetInterfaceByIndex(iface.Index)
-	if err != nil {
-		t.Fatal(err)
-	}
-	iface, err = GetInterfaceByName(iface.Name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(iface)
 }
 
 func TestPickIPv4Addr(t *testing.T) {

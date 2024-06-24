@@ -15,7 +15,7 @@ import (
 
 	tun "github.com/josexy/cropstun"
 	"github.com/josexy/cropstun/bind"
-	"github.com/josexy/cropstun/iface"
+	"github.com/josexy/cropstun/route"
 )
 
 var (
@@ -44,13 +44,13 @@ func tunnel(dst, src io.ReadWriteCloser) {
 func (*myHandler) HandleTCPConnection(conn net.Conn, info tun.Metadata) error {
 	log.Printf("tcp, src: %s, dst: %s", info.Source, info.Destination)
 	dialer := net.Dialer{Timeout: time.Second * 10}
-	name, err := iface.DefaultRouteInterface()
+	defaultRoute, err := route.DefaultRouteInterface()
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 	// bind an outbound interface to avoid routing loops
-	if err := bind.BindToDeviceForConn(name, &dialer, "tcp4", info.Destination.Addr()); err != nil {
+	if err := bind.BindToDeviceForConn(defaultRoute.InterfaceName, &dialer, "tcp4", info.Destination.Addr()); err != nil {
 		log.Println(err)
 		return err
 	}

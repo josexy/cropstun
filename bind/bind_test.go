@@ -10,18 +10,19 @@ import (
 	"time"
 
 	"github.com/josexy/cropstun/iface"
+	"github.com/josexy/cropstun/route"
 )
 
 func TestBindToDeviceForTCP(t *testing.T) {
 	dialer := net.Dialer{Timeout: time.Second * 5}
 	addr := netip.MustParseAddr("110.242.68.4")
 
-	ifaceName, err := iface.DefaultRouteInterface()
+	defaultRoute, err := route.DefaultRouteInterface()
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Println(ifaceName)
-	if err := BindToDeviceForConn(ifaceName, &dialer, "tcp", addr); err != nil {
+	log.Println(defaultRoute.InterfaceName, defaultRoute.InterfaceIndex)
+	if err := BindToDeviceForConn(defaultRoute.InterfaceName, &dialer, "tcp", addr); err != nil {
 		t.Fatal(err)
 	}
 	client := &http.Client{Transport: &http.Transport{DialContext: dialer.DialContext}}
@@ -38,11 +39,11 @@ func TestBindToDeviceForTCP(t *testing.T) {
 
 func TestBindToDeviceForUDP(t *testing.T) {
 	var lc net.ListenConfig
-	ifaceName, err := iface.DefaultRouteInterface()
+	defaultRoute, err := route.DefaultRouteInterface()
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Println(ifaceName)
+	log.Println(defaultRoute.InterfaceName, defaultRoute.InterfaceIndex)
 
 	go func() {
 		var lc net.ListenConfig
@@ -58,7 +59,7 @@ func TestBindToDeviceForUDP(t *testing.T) {
 		}
 	}()
 
-	addr, err := BindToDeviceForPacket(ifaceName, &lc, "udp", "")
+	addr, err := BindToDeviceForPacket(defaultRoute.InterfaceName, &lc, "udp", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +73,7 @@ func TestBindToDeviceForUDP(t *testing.T) {
 	buf := make([]byte, 1024)
 
 	var targetIP string
-	ifaceObj, err := iface.GetInterfaceByName(ifaceName)
+	ifaceObj, err := iface.GetInterfaceByName(defaultRoute.InterfaceName)
 	if err == nil && ifaceObj != nil && len(ifaceObj.Addrs) > 0 {
 		targetIP = ifaceObj.Addrs[0].Addr().String()
 	}
