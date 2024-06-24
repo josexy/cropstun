@@ -34,12 +34,12 @@ type udpOnceCloser struct {
 }
 
 func (c *tcpOnceCloser) Close() error {
-	c.once.Do(func() { c.Conn.Close() })
+	c.once.Do(func() { c.err = c.Conn.Close() })
 	return c.err
 }
 
 func (c *udpOnceCloser) Close() error {
-	c.once.Do(func() { c.PacketConn.Close() })
+	c.once.Do(func() { c.err = c.PacketConn.Close() })
 	return c.err
 }
 
