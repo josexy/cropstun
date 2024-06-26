@@ -30,9 +30,10 @@ type Handler interface {
 }
 
 type Tun interface {
-	io.ReadWriter
+	io.ReadWriteCloser
 	N.VectorisedWriter
-	Close() error
+	SetupDNS([]netip.Addr) error
+	TeardownDNS() error
 }
 
 type WinTun interface {
@@ -46,6 +47,7 @@ type LinuxTUN interface {
 }
 
 const (
+	DefaultMTU                = 9000
 	DefaultIPRoute2TableIndex = 4000
 	DefaultIPRoute2RuleIndex  = 10086
 )
@@ -57,6 +59,7 @@ type Options struct {
 	MTU                uint32
 	IPRoute2TableIndex int
 	IPRoute2RuleIndex  int
+	AutoRoute          bool
 }
 
 func NewTunDevice(cidrs []netip.Prefix, options *Options) (Tun, error) {
@@ -64,7 +67,7 @@ func NewTunDevice(cidrs []netip.Prefix, options *Options) (Tun, error) {
 		options.Name = CalculateInterfaceName(options.Name)
 	}
 	if options.MTU == 0 {
-		options.MTU = 9000
+		options.MTU = DefaultMTU
 	}
 	if options.IPRoute2TableIndex <= 0 {
 		options.IPRoute2TableIndex = DefaultIPRoute2TableIndex

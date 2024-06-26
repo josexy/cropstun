@@ -159,8 +159,6 @@ func (t *NativeTun) configure(tunLink netlink.Link) error {
 		return err
 	}
 
-	t.setSearchDomainForSystemdResolved()
-
 	return nil
 }
 
@@ -217,6 +215,17 @@ func (t *NativeTun) nextIndex6() int {
 }
 
 func (t *NativeTun) rules() []*netlink.Rule {
+	if !t.options.AutoRoute {
+		if len(t.options.Inet6Address) > 0 {
+			it := netlink.NewRule()
+			it.Priority = t.nextIndex6()
+			it.Table = t.options.IPRoute2TableIndex
+			it.Family = unix.AF_INET6
+			it.OifName = t.options.Name
+			return []*netlink.Rule{it}
+		}
+		return nil
+	}
 	var p4, p6 bool
 	var pRule int
 	if len(t.options.Inet4Address) > 0 {
@@ -439,20 +448,22 @@ func (t *NativeTun) unsetRules() error {
 		t.ruleIndex6 = nil
 	}
 
-	ruleList, err := netlink.RuleList(netlink.FAMILY_ALL)
-	if err != nil {
-		return err
-	}
-	for _, rule := range ruleList {
-		ruleStart := t.options.IPRoute2RuleIndex
-		ruleEnd := ruleStart + 10
-		if rule.Priority >= ruleStart && rule.Priority <= ruleEnd {
-			ruleToDel := netlink.NewRule()
-			ruleToDel.Family = rule.Family
-			ruleToDel.Priority = rule.Priority
-			err = netlink.RuleDel(ruleToDel)
-			if err != nil {
-				return err
+	if t.options.AutoRoute {
+		ruleList, err := netlink.RuleList(netlink.FAMILY_ALL)
+		if err != nil {
+			return err
+		}
+		for _, rule := range ruleList {
+			ruleStart := t.options.IPRoute2RuleIndex
+			ruleEnd := ruleStart + 10
+			if rule.Priority >= ruleStart && rule.Priority <= ruleEnd {
+				ruleToDel := netlink.NewRule()
+				ruleToDel.Family = rule.Family
+				ruleToDel.Priority = rule.Priority
+				err = netlink.RuleDel(ruleToDel)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -464,23 +475,19 @@ func (t *NativeTun) resetRules() error {
 	return t.setRules()
 }
 
-func (t *NativeTun) setSearchDomainForSystemdResolved() {
+func (t *NativeTun) SetupDNS(addrs []netip.Addr) error {
+	if len(addrs) == 0 {
+		return nil
+	}
 	ctlPath, err := exec.LookPath("resolvectl")
 	if err != nil {
-		return
+		return err
 	}
-	var dnsServer []netip.Addr
-	if len(t.options.Inet4Address) > 0 {
-		dnsServer = append(dnsServer, t.options.Inet4Address[0].Addr().Next())
-	}
-	if len(t.options.Inet6Address) > 0 {
-		dnsServer = append(dnsServer, t.options.Inet6Address[0].Addr().Next())
-	}
-	if len(dnsServer) == 0 {
-		return
-	}
-	dnsServerList := make([]string, 0, len(dnsServer))
-	for _, dns := range dnsServer {
+	var dnsServerList []string
+	for _, dns := range addrs {
+		if !dns.IsValid() {
+			continue
+		}
 		dnsServerList = append(dnsServerList, dns.String())
 	}
 	go func() {
@@ -488,7 +495,10 @@ func (t *NativeTun) setSearchDomainForSystemdResolved() {
 		_ = execCommand(ctlPath, "default-route", t.options.Name, "true")
 		_ = execCommand(ctlPath, append([]string{"dns", t.options.Name}, dnsServerList...)...)
 	}()
+	return nil
 }
+
+func (t *NativeTun) TeardownDNS() error { return nil }
 
 func execCommand(name string, args ...string) error {
 	command := exec.Command(name, args...)

@@ -63,6 +63,8 @@ func newGVisor(options StackOptions) (Stack, error) {
 	return gStack, nil
 }
 
+func (t *GVisor) TunDevice() Tun { return t.tun }
+
 func (t *GVisor) Start() error {
 	linkEndpoint, err := t.tun.NewEndpoint()
 	if err != nil {

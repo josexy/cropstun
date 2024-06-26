@@ -3,6 +3,7 @@ package tun
 type Stack interface {
 	Start() error
 	Close() error
+	TunDevice() Tun
 }
 
 type StackOptions struct {

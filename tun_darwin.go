@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -231,22 +232,24 @@ func configure(tunFd int, ifIndex int, name string, options *Options) error {
 			}
 		}
 	}
-	var routeRanges []netip.Prefix
-	routeRanges, err = options.BuildAutoRouteRanges()
-	if err != nil {
-		return err
-	}
-	for _, routeRange := range routeRanges {
-		if routeRange.Addr().Is4() {
-			err = addRoute(routeRange, options.Inet4Address[0].Addr())
-		} else {
-			err = addRoute(routeRange, options.Inet6Address[0].Addr())
-		}
+	if options.AutoRoute {
+		var routeRanges []netip.Prefix
+		routeRanges, err = options.BuildAutoRouteRanges()
 		if err != nil {
 			return err
 		}
+		for _, routeRange := range routeRanges {
+			if routeRange.Addr().Is4() {
+				err = addRoute(routeRange, options.Inet4Address[0].Addr())
+			} else {
+				err = addRoute(routeRange, options.Inet6Address[0].Addr())
+			}
+			if err != nil {
+				return err
+			}
+		}
+		flushDNSCache()
 	}
-	flushDNSCache()
 	return nil
 }
 
@@ -291,4 +294,62 @@ func addRoute(destination netip.Prefix, gateway netip.Addr) error {
 
 func flushDNSCache() {
 	exec.Command("dscacheutil", "-flushcache").Start()
+}
+
+func (t *NativeTun) SetupDNS(addrs []netip.Addr) error {
+	if len(addrs) == 0 {
+		return nil
+	}
+	var dnsServers []string
+	for _, addr := range addrs {
+		if !addr.IsValid() {
+			continue
+		}
+		dnsServers = append(dnsServers, "\""+addr.String()+"\"")
+	}
+
+	shellcmd := `
+function scutil_query {
+key=$1
+scutil <<EOT
+open
+get $key
+d.show
+close
+EOT
+}
+function updateDNS {
+    SERVICE_GUID=$(scutil_query State:/Network/Global/IPv4 | grep "PrimaryService" | awk '{print $3}')
+    currentservice=$(scutil_query Setup:/Network/Service/$SERVICE_GUID | grep "UserDefinedName" | awk -F': ' '{print $2}')
+    networksetup -setdnsservers "$currentservice" ` + strings.Join(dnsServers, " ") + `
+}
+function flushCache {
+    dscacheutil -flushcache
+}
+updateDNS
+dscacheutil -flushcache
+`
+	return exec.Command("sh", "-c", shellcmd).Start()
+}
+
+func (t *NativeTun) TeardownDNS() error {
+	shellcmd := `
+function scutil_query {
+key=$1
+scutil <<EOT
+open
+get $key
+d.show
+close
+EOT
+}
+function updateDNS {
+    SERVICE_GUID=$(scutil_query State:/Network/Global/IPv4 | grep "PrimaryService" | awk '{print $3}')
+    currentservice=$(scutil_query Setup:/Network/Service/$SERVICE_GUID | grep "UserDefinedName" | awk -F': ' '{print $2}')
+	networksetup -setdnsservers "$currentservice" empty
+}
+updateDNS
+dscacheutil -flushcache
+`
+	return exec.Command("sh", "-c", shellcmd).Start()
 }

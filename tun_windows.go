@@ -61,15 +61,45 @@ func New(options *Options) (WinTun, error) {
 	return nativeTun, nil
 }
 
+func (t *NativeTun) SetupDNS(addrs []netip.Addr) error {
+	if len(addrs) == 0 {
+		return nil
+	}
+	var dnsServers4, dnsServers6 []netip.Addr
+	for _, addr := range addrs {
+		if !addr.IsValid() {
+			continue
+		}
+		if addr.Is4() {
+			dnsServers4 = append(dnsServers4, addr)
+		} else {
+			dnsServers6 = append(dnsServers6, addr)
+		}
+	}
+	var err error
+	luid := winipcfg.LUID(t.adapter.LUID())
+	if len(dnsServers4) > 0 {
+		err = luid.SetDNS(winipcfg.AddressFamily(windows.AF_INET), dnsServers4, nil)
+		if err != nil {
+			return err
+		}
+	}
+	if len(dnsServers6) > 0 {
+		err = luid.SetDNS(winipcfg.AddressFamily(windows.AF_INET6), dnsServers6, nil)
+		if err != nil {
+			return err
+		}
+	}
+	err = windnsapi.FlushResolverCache()
+	return err
+}
+
+func (t *NativeTun) TeardownDNS() error { return nil }
+
 func (t *NativeTun) configure() error {
 	luid := winipcfg.LUID(t.adapter.LUID())
 	if len(t.options.Inet4Address) > 0 {
 		err := luid.SetIPAddressesForFamily(winipcfg.AddressFamily(windows.AF_INET), t.options.Inet4Address)
-		if err != nil {
-			return err
-		}
-		dnsServers := []netip.Addr{t.options.Inet4Address[0].Addr().Next()}
-		err = luid.SetDNS(winipcfg.AddressFamily(windows.AF_INET), dnsServers, nil)
 		if err != nil {
 			return err
 		}
@@ -79,32 +109,29 @@ func (t *NativeTun) configure() error {
 		if err != nil {
 			return err
 		}
-		dnsServers := []netip.Addr{t.options.Inet6Address[0].Addr().Next()}
-		err = luid.SetDNS(winipcfg.AddressFamily(windows.AF_INET6), dnsServers, nil)
-		if err != nil {
-			return err
-		}
 	}
 	if len(t.options.Inet4Address) > 0 || len(t.options.Inet6Address) > 0 {
 		_ = luid.DisableDNSRegistration()
 	}
-	routeRanges, err := t.options.BuildAutoRouteRanges()
-	if err != nil {
-		return err
-	}
-	for _, routeRange := range routeRanges {
-		if routeRange.Addr().Is4() {
-			err = luid.AddRoute(routeRange, netip.IPv4Unspecified(), 0)
-		} else {
-			err = luid.AddRoute(routeRange, netip.IPv6Unspecified(), 0)
+	if t.options.AutoRoute {
+		routeRanges, err := t.options.BuildAutoRouteRanges()
+		if err != nil {
+			return err
 		}
-	}
-	if err != nil {
-		return err
-	}
-	err = windnsapi.FlushResolverCache()
-	if err != nil {
-		return err
+		for _, routeRange := range routeRanges {
+			if routeRange.Addr().Is4() {
+				err = luid.AddRoute(routeRange, netip.IPv4Unspecified(), 0)
+			} else {
+				err = luid.AddRoute(routeRange, netip.IPv6Unspecified(), 0)
+			}
+		}
+		if err != nil {
+			return err
+		}
+		err = windnsapi.FlushResolverCache()
+		if err != nil {
+			return err
+		}
 	}
 	if len(t.options.Inet4Address) > 0 {
 		inetIf, err := luid.IPInterface(winipcfg.AddressFamily(windows.AF_INET))
@@ -117,8 +144,10 @@ func (t *NativeTun) configure() error {
 		inetIf.ManagedAddressConfigurationSupported = false
 		inetIf.OtherStatefulConfigurationSupported = false
 		inetIf.NLMTU = t.options.MTU
-		inetIf.UseAutomaticMetric = false
-		inetIf.Metric = 0
+		if t.options.AutoRoute {
+			inetIf.UseAutomaticMetric = false
+			inetIf.Metric = 0
+		}
 		err = inetIf.Set()
 		if err != nil {
 			return err
@@ -134,17 +163,23 @@ func (t *NativeTun) configure() error {
 		inet6If.ManagedAddressConfigurationSupported = false
 		inet6If.OtherStatefulConfigurationSupported = false
 		inet6If.NLMTU = t.options.MTU
-		inet6If.UseAutomaticMetric = false
-		inet6If.Metric = 0
+		if t.options.AutoRoute {
+			inet6If.UseAutomaticMetric = false
+			inet6If.Metric = 0
+		}
 		err = inet6If.Set()
 		if err != nil {
 			return err
 		}
 	}
 
+	if !t.options.AutoRoute {
+		return nil
+	}
+
 	var engine uintptr
 	session := &winsys.FWPM_SESSION0{Flags: winsys.FWPM_SESSION_FLAG_DYNAMIC}
-	err = winsys.FwpmEngineOpen0(nil, winsys.RPC_C_AUTHN_DEFAULT, nil, session, unsafe.Pointer(&engine))
+	err := winsys.FwpmEngineOpen0(nil, winsys.RPC_C_AUTHN_DEFAULT, nil, session, unsafe.Pointer(&engine))
 	if err != nil {
 		return os.NewSyscallError("FwpmEngineOpen0", err)
 	}
@@ -458,7 +493,9 @@ func (t *NativeTun) Close() error {
 		if t.fwpmSession != 0 {
 			winsys.FwpmEngineClose0(t.fwpmSession)
 		}
-		windnsapi.FlushResolverCache()
+		if t.options.AutoRoute {
+			windnsapi.FlushResolverCache()
+		}
 	})
 	return err
 }
