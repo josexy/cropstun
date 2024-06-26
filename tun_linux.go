@@ -217,6 +217,17 @@ func (t *NativeTun) nextIndex6() int {
 }
 
 func (t *NativeTun) rules() []*netlink.Rule {
+	if !t.options.AutoRoute {
+		if len(t.options.Inet6Address) > 0 {
+			it := netlink.NewRule()
+			it.Priority = t.nextIndex6()
+			it.Table = t.options.IPRoute2TableIndex
+			it.Family = unix.AF_INET6
+			it.OifName = t.options.Name
+			return []*netlink.Rule{it}
+		}
+		return nil
+	}
 	var p4, p6 bool
 	var pRule int
 	if len(t.options.Inet4Address) > 0 {
@@ -439,20 +450,22 @@ func (t *NativeTun) unsetRules() error {
 		t.ruleIndex6 = nil
 	}
 
-	ruleList, err := netlink.RuleList(netlink.FAMILY_ALL)
-	if err != nil {
-		return err
-	}
-	for _, rule := range ruleList {
-		ruleStart := t.options.IPRoute2RuleIndex
-		ruleEnd := ruleStart + 10
-		if rule.Priority >= ruleStart && rule.Priority <= ruleEnd {
-			ruleToDel := netlink.NewRule()
-			ruleToDel.Family = rule.Family
-			ruleToDel.Priority = rule.Priority
-			err = netlink.RuleDel(ruleToDel)
-			if err != nil {
-				return err
+	if t.options.AutoRoute {
+		ruleList, err := netlink.RuleList(netlink.FAMILY_ALL)
+		if err != nil {
+			return err
+		}
+		for _, rule := range ruleList {
+			ruleStart := t.options.IPRoute2RuleIndex
+			ruleEnd := ruleStart + 10
+			if rule.Priority >= ruleStart && rule.Priority <= ruleEnd {
+				ruleToDel := netlink.NewRule()
+				ruleToDel.Family = rule.Family
+				ruleToDel.Priority = rule.Priority
+				err = netlink.RuleDel(ruleToDel)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

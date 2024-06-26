@@ -80,7 +80,11 @@ func main() {
 
 	log.Println(tunName, tunCIDR, remoteAddr)
 
-	tunOpt := new(tun.Options)
+	tunOpt := &tun.Options{
+		Name:      tunName,
+		MTU:       tun.DefaultMTU,
+		AutoRoute: true,
+	}
 	tunIf, err := tun.NewTunDevice([]netip.Prefix{netip.MustParsePrefix(tunCIDR)}, tunOpt)
 	if err != nil {
 		log.Fatal(err)

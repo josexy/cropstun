@@ -231,22 +231,24 @@ func configure(tunFd int, ifIndex int, name string, options *Options) error {
 			}
 		}
 	}
-	var routeRanges []netip.Prefix
-	routeRanges, err = options.BuildAutoRouteRanges()
-	if err != nil {
-		return err
-	}
-	for _, routeRange := range routeRanges {
-		if routeRange.Addr().Is4() {
-			err = addRoute(routeRange, options.Inet4Address[0].Addr())
-		} else {
-			err = addRoute(routeRange, options.Inet6Address[0].Addr())
-		}
+	if options.AutoRoute {
+		var routeRanges []netip.Prefix
+		routeRanges, err = options.BuildAutoRouteRanges()
 		if err != nil {
 			return err
 		}
+		for _, routeRange := range routeRanges {
+			if routeRange.Addr().Is4() {
+				err = addRoute(routeRange, options.Inet4Address[0].Addr())
+			} else {
+				err = addRoute(routeRange, options.Inet6Address[0].Addr())
+			}
+			if err != nil {
+				return err
+			}
+		}
+		flushDNSCache()
 	}
-	flushDNSCache()
 	return nil
 }
 
