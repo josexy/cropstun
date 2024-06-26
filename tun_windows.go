@@ -61,6 +61,41 @@ func New(options *Options) (WinTun, error) {
 	return nativeTun, nil
 }
 
+func (t *NativeTun) SetupDNS(addrs []netip.Addr) error {
+	if len(addrs) == 0 {
+		return nil
+	}
+	var dnsServers4, dnsServers6 []netip.Addr
+	for _, addr := range addrs {
+		if !addr.IsValid() {
+			continue
+		}
+		if addr.Is4() {
+			dnsServers4 = append(dnsServers4, addr)
+		} else {
+			dnsServers6 = append(dnsServers6, addr)
+		}
+	}
+	var err error
+	luid := winipcfg.LUID(t.adapter.LUID())
+	if len(dnsServers4) > 0 {
+		err = luid.SetDNS(winipcfg.AddressFamily(windows.AF_INET), dnsServers4, nil)
+		if err != nil {
+			return err
+		}
+	}
+	if len(dnsServers6) > 0 {
+		err = luid.SetDNS(winipcfg.AddressFamily(windows.AF_INET6), dnsServers6, nil)
+		if err != nil {
+			return err
+		}
+	}
+	err = windnsapi.FlushResolverCache()
+	return err
+}
+
+func (t *NativeTun) TeardownDNS() error { return nil }
+
 func (t *NativeTun) configure() error {
 	luid := winipcfg.LUID(t.adapter.LUID())
 	if len(t.options.Inet4Address) > 0 {
@@ -68,19 +103,9 @@ func (t *NativeTun) configure() error {
 		if err != nil {
 			return err
 		}
-		dnsServers := []netip.Addr{t.options.Inet4Address[0].Addr().Next()}
-		err = luid.SetDNS(winipcfg.AddressFamily(windows.AF_INET), dnsServers, nil)
-		if err != nil {
-			return err
-		}
 	}
 	if len(t.options.Inet6Address) > 0 {
 		err := luid.SetIPAddressesForFamily(winipcfg.AddressFamily(windows.AF_INET6), t.options.Inet6Address)
-		if err != nil {
-			return err
-		}
-		dnsServers := []netip.Addr{t.options.Inet6Address[0].Addr().Next()}
-		err = luid.SetDNS(winipcfg.AddressFamily(windows.AF_INET6), dnsServers, nil)
 		if err != nil {
 			return err
 		}

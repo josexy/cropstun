@@ -30,9 +30,10 @@ type Handler interface {
 }
 
 type Tun interface {
-	io.ReadWriter
+	io.ReadWriteCloser
 	N.VectorisedWriter
-	Close() error
+	SetupDNS([]netip.Addr) error
+	TeardownDNS() error
 }
 
 type WinTun interface {
