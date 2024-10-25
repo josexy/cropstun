@@ -4,28 +4,27 @@ import (
 	"context"
 	"errors"
 	"net"
-	"net/netip"
 	"syscall"
 )
 
 var ErrInvalidIPAddr = errors.New("invalid ip address")
 
-func BindToDeviceForConn(ifaceName string, dialer *net.Dialer, network string, dst netip.Addr) error {
-	return bindToDeviceForConn(ifaceName, dialer, network, dst)
+func BindToDeviceForConn(ifaceName string, dialer *net.Dialer) error {
+	return bindToDeviceForConn(ifaceName, dialer)
 }
 
-func BindToDeviceForPacket(ifaceName string, lc *net.ListenConfig, network, dst string) (string, error) {
-	return bindToDeviceForPacket(ifaceName, lc, network, dst)
+func BindToDeviceForPacket(ifaceName string, lc *net.ListenConfig) error {
+	return bindToDeviceForPacket(ifaceName, lc)
 }
 
 type controlFn = func(ctx context.Context, network, address string, c syscall.RawConn) error
 
 func addControlToListenConfig(lc *net.ListenConfig, fn controlFn) {
-	llc := *lc
+	olc := *lc
 	lc.Control = func(network, address string, c syscall.RawConn) (err error) {
 		switch {
-		case llc.Control != nil:
-			if err = llc.Control(network, address, c); err != nil {
+		case olc.Control != nil:
+			if err = olc.Control(network, address, c); err != nil {
 				return
 			}
 		}
@@ -34,15 +33,15 @@ func addControlToListenConfig(lc *net.ListenConfig, fn controlFn) {
 }
 
 func addControlToDialer(d *net.Dialer, fn controlFn) {
-	ld := *d
+	od := *d
 	d.ControlContext = func(ctx context.Context, network, address string, c syscall.RawConn) (err error) {
 		switch {
-		case ld.ControlContext != nil:
-			if err = ld.ControlContext(ctx, network, address, c); err != nil {
+		case od.ControlContext != nil:
+			if err = od.ControlContext(ctx, network, address, c); err != nil {
 				return
 			}
-		case ld.Control != nil:
-			if err = ld.Control(network, address, c); err != nil {
+		case od.Control != nil:
+			if err = od.Control(network, address, c); err != nil {
 				return
 			}
 		}

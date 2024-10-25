@@ -18,19 +18,19 @@ import (
 )
 
 var (
-	tunName    string = "utun5"
-	tunCIDR    string = "192.168.0.10/16"
-	remoteAddr string = ""
+	tunName       string = "tun5" // the tun name for darwin should has the prefix "utun", such as "utun5"
+	tunCIDR       string = "198.10.0.10/16"
+	outboundIface string
 )
 
 var _ tun.Handler = (*myHandler)(nil)
 
 type myHandler struct{}
 
-func tunnel(dst, src io.ReadWriteCloser) {
-	errCh := make(chan error, 2)
+func tunnel(dst, src net.Conn) {
 	defer dst.Close()
 	defer src.Close()
+	errCh := make(chan error, 2)
 	fn := func(dest, src io.ReadWriteCloser) {
 		_, err := io.Copy(dest, src)
 		errCh <- err
@@ -40,50 +40,59 @@ func tunnel(dst, src io.ReadWriteCloser) {
 	<-errCh
 }
 
-func (*myHandler) HandleTCPConnection(conn net.Conn, info tun.Metadata) error {
-	log.Printf("tcp, src: %s, dst: %s", info.Source, info.Destination)
+func (*myHandler) HandleTCPConnection(srcConn net.Conn, info tun.Metadata) error {
+	log.Printf("HandleTCPConnection, src: %s, dst: %s, out iface: %s", info.Source, info.Destination, outboundIface)
+
+	// bind an outbound interface to avoid routing loops!!!
 	dialer := net.Dialer{Timeout: time.Second * 10}
-	defaultRoute, err := route.DefaultRouteInterface()
+	if err := bind.BindToDeviceForConn(outboundIface, &dialer); err != nil {
+		log.Println(err)
+		return err
+	}
+	dstConn, err := dialer.DialContext(context.Background(), "tcp", info.Destination.String())
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	// bind an outbound interface to avoid routing loops
-	if err := bind.BindToDeviceForConn(defaultRoute.InterfaceName, &dialer, "tcp4", info.Destination.Addr()); err != nil {
-		log.Println(err)
-		return err
-	}
-	target, err := dialer.DialContext(context.Background(), "tcp4", remoteAddr)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	tunnel(target, conn)
+	// relay the data between the two connections
+	tunnel(dstConn, srcConn)
 	return nil
 }
 
 func (*myHandler) HandleUDPConnection(conn net.PacketConn, info tun.Metadata) error {
-	log.Printf("udp, src: %s, dst: %s", info.Source, info.Destination)
-	// do something...
+	log.Printf("HandleUDPConnection, src: %s, dst: %s, out iface: %s", info.Source, info.Destination, outboundIface)
+
+	var lc net.ListenConfig
+	if err := bind.BindToDeviceForPacket(outboundIface, &lc); err != nil {
+		log.Println(err)
+		return err
+	}
+	nm := newNatMap(&lc)
+	nm.serve(conn, net.UDPAddrFromAddrPort(info.Destination))
 	return nil
 }
 
+// go build -o main . && sudo ./main
+// curl --interface tun5 www.example.com
 func main() {
-	flag.StringVar(&tunName, "name", tunName, "tun device name")
-	flag.StringVar(&tunCIDR, "addr", tunCIDR, "tun device cidr address")
-	flag.StringVar(&remoteAddr, "remote", remoteAddr, "test remote address")
-	flag.Parse()
-
-	if remoteAddr == "" {
-		log.Fatal("need remote address")
+	rt, err := route.DefaultRouteInterface()
+	if err != nil {
+		log.Println(err)
+	} else {
+		outboundIface = rt.InterfaceName
 	}
 
-	log.Println(tunName, tunCIDR, remoteAddr)
+	flag.StringVar(&tunName, "name", tunName, "tun device name")
+	flag.StringVar(&tunCIDR, "addr", tunCIDR, "tun device cidr address")
+	flag.StringVar(&outboundIface, "outbound-iface", outboundIface, "outbound interface")
+	flag.Parse()
+
+	log.Println(tunName, tunCIDR, outboundIface)
 
 	tunOpt := &tun.Options{
 		Name:      tunName,
 		MTU:       tun.DefaultMTU,
-		AutoRoute: true,
+		AutoRoute: true, // AutoRoute will add related routes automatically
 	}
 	tunIf, err := tun.NewTunDevice([]netip.Prefix{netip.MustParsePrefix(tunCIDR)}, tunOpt)
 	if err != nil {

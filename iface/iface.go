@@ -26,48 +26,6 @@ func init() {
 	_ = FlushAllInterfaces()
 }
 
-func (iface *Interface) PickIPv4Addr(dst netip.Addr) netip.Addr {
-	return iface.pickIPAddr(dst, func(addr netip.Prefix) bool {
-		return addr.Addr().Is4()
-	})
-}
-
-func (iface *Interface) PickIPv6Addr(dst netip.Addr) netip.Addr {
-	return iface.pickIPAddr(dst, func(addr netip.Prefix) bool {
-		return addr.Addr().Is6()
-	})
-}
-
-// pickIPAddr pick a valid ip address from all interfaces which serve as outbound address
-func (iface *Interface) pickIPAddr(dst netip.Addr, accept func(addr netip.Prefix) bool) netip.Addr {
-	var fallback netip.Addr
-
-	for _, addr := range iface.Addrs {
-		if !accept(addr) {
-			continue
-		}
-
-		// ignore link-local unicast address
-		// ipv4: 169.254.0.0/16
-		// ipv6: fe80::/10
-		if !fallback.IsValid() && !addr.Addr().IsLinkLocalUnicast() {
-			fallback = addr.Addr()
-			// this case is occur when pick a UDP local address
-			if !dst.IsValid() {
-				break
-			}
-		}
-
-		// the destination and picked address at same subnet
-		// so it is easy to return the trigged interface address
-		if dst.IsValid() && addr.Contains(dst) {
-			return addr.Addr()
-		}
-	}
-
-	return fallback
-}
-
 func GetInterfaceByIndex(index int) (*Interface, error) {
 	mu.RLock()
 	defer mu.RUnlock()

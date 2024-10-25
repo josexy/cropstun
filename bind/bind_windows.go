@@ -36,7 +36,7 @@ func bind6(handle syscall.Handle, ifaceIdx int) error {
 	return err
 }
 
-func bindControl(ifaceIdx int) controlFn {
+func setupControl(ifaceIdx int) controlFn {
 	return func(ctx context.Context, network, address string, c syscall.RawConn) (err error) {
 		addrPort, err := netip.ParseAddrPort(address)
 		if err == nil && !addrPort.Addr().IsGlobalUnicast() {
@@ -76,20 +76,20 @@ func bindControl(ifaceIdx int) controlFn {
 	}
 }
 
-func bindToDeviceForConn(ifaceName string, dialer *net.Dialer, _ string, _ netip.Addr) error {
+func bindToDeviceForConn(ifaceName string, dialer *net.Dialer) error {
 	iface, err := iface.GetInterfaceByName(ifaceName)
 	if err != nil {
 		return err
 	}
-	addControlToDialer(dialer, bindControl(iface.Index))
+	addControlToDialer(dialer, setupControl(iface.Index))
 	return nil
 }
 
-func bindToDeviceForPacket(ifaceName string, lc *net.ListenConfig, _, address string) (string, error) {
+func bindToDeviceForPacket(ifaceName string, lc *net.ListenConfig) error {
 	iface, err := iface.GetInterfaceByName(ifaceName)
 	if err != nil {
-		return "", err
+		return err
 	}
-	addControlToListenConfig(lc, bindControl(iface.Index))
-	return address, nil
+	addControlToListenConfig(lc, setupControl(iface.Index))
+	return nil
 }
