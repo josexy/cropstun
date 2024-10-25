@@ -1,12 +1,10 @@
 module github.com/josexy/cropstun
 
-go 1.22.0
-
-toolchain go1.22.4
+go 1.23.0
 
 require (
 	github.com/go-ole/go-ole v1.3.0
-	github.com/vishvananda/netlink v1.2.1-beta.2
+	github.com/vishvananda/netlink v1.3.0
 	golang.org/x/net v0.26.0
 	golang.org/x/sys v0.21.0
 	gvisor.dev/gvisor v0.0.0-20240622015726-dfeb44ecf5ac
