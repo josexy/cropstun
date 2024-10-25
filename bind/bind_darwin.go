@@ -7,7 +7,6 @@ import (
 	"syscall"
 
 	"github.com/josexy/cropstun/iface"
-	"golang.org/x/sys/unix"
 )
 
 func setupControl(ifaceIndex int) controlFn {
@@ -21,9 +20,9 @@ func setupControl(ifaceIndex int) controlFn {
 		err = c.Control(func(fd uintptr) {
 			switch network {
 			case "tcp4", "udp4":
-				innerErr = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_BOUND_IF, ifaceIndex)
+				innerErr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_BOUND_IF, ifaceIndex)
 			case "tcp6", "udp6":
-				innerErr = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_BOUND_IF, ifaceIndex)
+				innerErr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_BOUND_IF, ifaceIndex)
 			}
 		})
 		if innerErr != nil {
@@ -33,7 +32,7 @@ func setupControl(ifaceIndex int) controlFn {
 	}
 }
 
-func bindToDeviceForConn(ifaceName string, dialer *net.Dialer, _ string, _ netip.Addr) error {
+func bindToDeviceForConn(ifaceName string, dialer *net.Dialer) error {
 	iface, err := iface.GetInterfaceByName(ifaceName)
 	if err != nil {
 		return err
@@ -42,11 +41,11 @@ func bindToDeviceForConn(ifaceName string, dialer *net.Dialer, _ string, _ netip
 	return nil
 }
 
-func bindToDeviceForPacket(ifaceName string, lc *net.ListenConfig, _, address string) (string, error) {
+func bindToDeviceForPacket(ifaceName string, lc *net.ListenConfig) error {
 	iface, err := iface.GetInterfaceByName(ifaceName)
 	if err != nil {
-		return "", err
+		return err
 	}
 	addControlToListenConfig(lc, setupControl(iface.Index))
-	return address, nil
+	return nil
 }

@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"syscall"
 
-	"golang.org/x/sys/unix"
+	"github.com/josexy/cropstun/iface"
 )
 
 func setupControl(ifaceName string) controlFn {
@@ -18,7 +18,7 @@ func setupControl(ifaceName string) controlFn {
 
 		var innerErr error
 		err = c.Control(func(fd uintptr) {
-			innerErr = unix.BindToDevice(int(fd), ifaceName)
+			innerErr = syscall.BindToDevice(int(fd), ifaceName)
 		})
 		if innerErr != nil {
 			err = innerErr
@@ -27,12 +27,20 @@ func setupControl(ifaceName string) controlFn {
 	}
 }
 
-func bindToDeviceForConn(ifaceName string, dialer *net.Dialer, _ string, _ netip.Addr) error {
-	addControlToDialer(dialer, setupControl(ifaceName))
+func bindToDeviceForConn(ifaceName string, dialer *net.Dialer) error {
+	iface, err := iface.GetInterfaceByName(ifaceName)
+	if err != nil {
+		return err
+	}
+	addControlToDialer(dialer, setupControl(iface.Name))
 	return nil
 }
 
-func bindToDeviceForPacket(ifaceName string, lc *net.ListenConfig, _, address string) (string, error) {
-	addControlToListenConfig(lc, setupControl(ifaceName))
-	return address, nil
+func bindToDeviceForPacket(ifaceName string, lc *net.ListenConfig) error {
+	iface, err := iface.GetInterfaceByName(ifaceName)
+	if err != nil {
+		return err
+	}
+	addControlToListenConfig(lc, setupControl(iface.Name))
+	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/netip"
 	"testing"
 	"time"
 
@@ -15,14 +14,13 @@ import (
 
 func TestBindToDeviceForTCP(t *testing.T) {
 	dialer := net.Dialer{Timeout: time.Second * 5}
-	addr := netip.MustParseAddr("110.242.68.4")
 
 	defaultRoute, err := route.DefaultRouteInterface()
 	if err != nil {
 		t.Fatal(err)
 	}
 	log.Println(defaultRoute.InterfaceName, defaultRoute.InterfaceIndex)
-	if err := BindToDeviceForConn(defaultRoute.InterfaceName, &dialer, "tcp", addr); err != nil {
+	if err := BindToDeviceForConn(defaultRoute.InterfaceName, &dialer); err != nil {
 		t.Fatal(err)
 	}
 	client := &http.Client{Transport: &http.Transport{DialContext: dialer.DialContext}}
@@ -59,11 +57,11 @@ func TestBindToDeviceForUDP(t *testing.T) {
 		}
 	}()
 
-	addr, err := BindToDeviceForPacket(defaultRoute.InterfaceName, &lc, "udp", "")
+	err = BindToDeviceForPacket(defaultRoute.InterfaceName, &lc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err := lc.ListenPacket(context.Background(), "udp", addr)
+	conn, err := lc.ListenPacket(context.Background(), "udp", "")
 	if err != nil {
 		t.Fatal(err)
 	}
