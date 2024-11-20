@@ -22,24 +22,24 @@ import (
 const defaultNIC tcpip.NICID = 1
 
 type tcpOnceCloser struct {
-	net.Conn
+	*gonet.TCPConn
 	once sync.Once
 	err  error
 }
 
 type udpOnceCloser struct {
-	net.PacketConn
+	*gonet.UDPConn
 	once sync.Once
 	err  error
 }
 
 func (c *tcpOnceCloser) Close() error {
-	c.once.Do(func() { c.err = c.Conn.Close() })
+	c.once.Do(func() { c.err = c.TCPConn.Close() })
 	return c.err
 }
 
 func (c *udpOnceCloser) Close() error {
-	c.once.Do(func() { c.err = c.PacketConn.Close() })
+	c.once.Do(func() { c.err = c.UDPConn.Close() })
 	return c.err
 }
 
@@ -102,7 +102,7 @@ func (t *GVisor) Start() error {
 			if tcpAddr, ok := rAddr.(*net.TCPAddr); ok {
 				metadata.Destination = tcpAddr.AddrPort()
 			}
-			newConn := &tcpOnceCloser{Conn: tcpConn}
+			newConn := &tcpOnceCloser{TCPConn: tcpConn}
 			defer newConn.Close()
 			hErr := t.handler.HandleTCPConnection(newConn, metadata)
 			if hErr != nil {
@@ -133,7 +133,7 @@ func (t *GVisor) Start() error {
 			if udpAddr, ok := rAddr.(*net.UDPAddr); ok {
 				metadata.Destination = udpAddr.AddrPort()
 			}
-			newConn := &udpOnceCloser{PacketConn: udpConn}
+			newConn := &udpOnceCloser{UDPConn: udpConn}
 			defer newConn.Close()
 			hErr := t.handler.HandleUDPConnection(newConn, metadata)
 			if hErr != nil {

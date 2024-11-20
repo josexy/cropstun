@@ -16,12 +16,21 @@ type Metadata struct {
 	Destination netip.AddrPort
 }
 
+type TCPConn interface {
+	net.Conn
+}
+
+type UDPConn interface {
+	net.Conn
+	net.PacketConn
+}
+
 type TCPConnectionHandler interface {
-	HandleTCPConnection(net.Conn, Metadata) error
+	HandleTCPConnection(TCPConn, Metadata) error
 }
 
 type UDPConnectionHandler interface {
-	HandleUDPConnection(net.PacketConn, Metadata) error
+	HandleUDPConnection(UDPConn, Metadata) error
 }
 
 type Handler interface {

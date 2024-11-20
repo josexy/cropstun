@@ -25,14 +25,20 @@ var (
 
 var _ tun.Handler = (*myHandler)(nil)
 
-type myHandler struct{}
+type myHandler struct {
+	dialer *net.Dialer
+	lc     *net.ListenConfig
+}
 
-func tunnel(dst, src net.Conn) {
+func tunnelTCP(dst, src net.Conn) {
 	defer dst.Close()
 	defer src.Close()
 	errCh := make(chan error, 2)
 	fn := func(dest, src io.ReadWriteCloser) {
 		_, err := io.Copy(dest, src)
+		if err != nil {
+			log.Println("tunnel tcp, err:", err)
+		}
 		errCh <- err
 	}
 	go fn(dst, src)
@@ -40,35 +46,89 @@ func tunnel(dst, src net.Conn) {
 	<-errCh
 }
 
-func (*myHandler) HandleTCPConnection(srcConn net.Conn, info tun.Metadata) error {
-	log.Printf("HandleTCPConnection, src: %s, dst: %s, out iface: %s", info.Source, info.Destination, outboundIface)
-
-	// bind an outbound interface to avoid routing loops!!!
-	dialer := net.Dialer{Timeout: time.Second * 10}
-	if err := bind.BindToDeviceForConn(outboundIface, &dialer); err != nil {
-		log.Println(err)
-		return err
+func tunnelUDP(dst, src net.PacketConn, to net.Addr, timeout time.Duration) {
+	defer dst.Close()
+	defer src.Close()
+	errCh := make(chan error, 2)
+	fn := func(dest, src net.PacketConn, to net.Addr, timeout time.Duration) {
+		err := copyPacketData(dest, src, to, timeout)
+		if err != nil {
+			log.Println("tunnel udp, err:", err)
+		}
+		errCh <- err
 	}
-	dstConn, err := dialer.DialContext(context.Background(), "tcp", info.Destination.String())
+	go fn(dst, src, to, timeout)
+	go fn(src, dst, nil, timeout)
+	<-errCh
+}
+
+func copyPacketData(dst, src net.PacketConn, to net.Addr, timeout time.Duration) error {
+	buf := make([]byte, 10240)
+	for {
+		src.SetReadDeadline(time.Now().Add(timeout))
+		n, from, err := src.ReadFrom(buf)
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if to == nil {
+			to = from
+		}
+		if _, err = dst.WriteTo(buf[:n], to); err != nil {
+			return err
+		}
+	}
+}
+
+type symmetricNATPacketConn struct {
+	net.PacketConn
+	dst string
+	src net.Addr
+}
+
+func newSymmetricNATPacketConn(pc net.PacketConn, metadata tun.Metadata) *symmetricNATPacketConn {
+	return &symmetricNATPacketConn{
+		PacketConn: pc,
+		dst:        metadata.Destination.String(),
+		src:        net.UDPAddrFromAddrPort(metadata.Source),
+	}
+}
+
+func (pc *symmetricNATPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
+	for {
+		n, from, err := pc.PacketConn.ReadFrom(p)
+		if from != nil && from.String() != pc.dst {
+			log.Printf("symmetric NAT %s->%s: drop packet from %s", pc.src.String(), pc.dst, from)
+			continue
+		}
+		return n, pc.src, err
+	}
+}
+
+func (h *myHandler) HandleTCPConnection(srcConn tun.TCPConn, info tun.Metadata) error {
+	log.Printf("HandleTCPConnection, src: %s, dst: %s, out iface: %s", info.Source, info.Destination, outboundIface)
+	dstConn, err := h.dialer.DialContext(context.Background(), "tcp", info.Destination.String())
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 	// relay the data between the two connections
-	tunnel(dstConn, srcConn)
+	tunnelTCP(dstConn, srcConn)
 	return nil
 }
 
-func (*myHandler) HandleUDPConnection(conn net.PacketConn, info tun.Metadata) error {
+func (h *myHandler) HandleUDPConnection(srcConn tun.UDPConn, info tun.Metadata) error {
 	log.Printf("HandleUDPConnection, src: %s, dst: %s, out iface: %s", info.Source, info.Destination, outboundIface)
 
-	var lc net.ListenConfig
-	if err := bind.BindToDeviceForPacket(outboundIface, &lc); err != nil {
+	dstConn, err := h.lc.ListenPacket(context.Background(), "udp", "")
+	if err != nil {
 		log.Println(err)
 		return err
 	}
-	nm := newNatMap(&lc)
-	nm.serve(conn, net.UDPAddrFromAddrPort(info.Destination))
+	dstConn = newSymmetricNATPacketConn(dstConn, info)
+	tunnelUDP(dstConn, srcConn, net.UDPAddrFromAddrPort(info.Destination), time.Second*10)
 	return nil
 }
 
@@ -98,11 +158,24 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// tunIf.SetupDNS([]netip.Addr{netip.MustParseAddr("114.114.114.114")})
+
+	handler := &myHandler{
+		dialer: &net.Dialer{Timeout: time.Second * 10},
+		lc:     &net.ListenConfig{},
+	}
+	// bind an outbound interface to avoid routing loops!!!
+	if err := bind.BindToDeviceForConn(outboundIface, handler.dialer); err != nil {
+		log.Fatal(err)
+	}
+	if err := bind.BindToDeviceForPacket(outboundIface, handler.lc); err != nil {
+		log.Fatal(err)
+	}
 
 	stack, err := tun.NewStack(tun.StackOptions{
 		Tun:        tunIf,
 		TunOptions: tunOpt,
-		Handler:    &myHandler{},
+		Handler:    handler,
 	})
 	if err != nil {
 		log.Fatal(err)
