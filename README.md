@@ -4,7 +4,7 @@ This project is based on the [sing-tun](https://github.com/SagerNet/sing-tun) pr
 
 Due to the removal of many customizations and some referenced code, it is for personal use only, and only supports Linux, macOS and Windows.
 
-# usage
+## usage
 
 ```shell
 go get github.com/josexy/cropstun
@@ -51,6 +51,12 @@ func main() {
 	time.Sleep(time.Second)
 }
 ```
+
+## Credits
+
+- [sing-tun](https://github.com/SagerNet/sing-tun)
+- [mihomo](https://github.com/MetaCubeX/mihomo)
+- [tun2socks](https://github.com/xjasonlyu/tun2socks)
 
 ## License
 
