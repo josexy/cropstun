@@ -14,6 +14,7 @@ import (
 
 	tun "github.com/josexy/cropstun"
 	"github.com/josexy/cropstun/bind"
+	"github.com/josexy/cropstun/process"
 	"github.com/josexy/cropstun/route"
 )
 
@@ -68,7 +69,9 @@ func copyPacketData(dst, src net.PacketConn, to net.Addr, timeout time.Duration)
 		src.SetReadDeadline(time.Now().Add(timeout))
 		n, from, err := src.ReadFrom(buf)
 		if err != nil {
-			if err == io.EOF {
+			if e, ok := err.(net.Error); ok && e.Timeout() {
+				return nil
+			} else if err == io.EOF {
 				return nil
 			}
 			return err
@@ -108,7 +111,10 @@ func (pc *symmetricNATPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 }
 
 func (h *myHandler) HandleTCPConnection(srcConn tun.TCPConn, info tun.Metadata) error {
-	log.Printf("HandleTCPConnection, src: %s, dst: %s, out iface: %s", info.Source, info.Destination, outboundIface)
+	uid, pid, procName, _ := process.FindProcessName(process.TCP, info.Source.Addr(), int(info.Source.Port()))
+	log.Printf("HandleTCPConnection, src: %s, dst: %s, out iface: %s, uid: %d, pid: %d, proc: %s",
+		info.Source, info.Destination, outboundIface, uid, pid, procName)
+
 	dstConn, err := h.dialer.DialContext(context.Background(), "tcp", info.Destination.String())
 	if err != nil {
 		log.Println(err)
@@ -120,7 +126,9 @@ func (h *myHandler) HandleTCPConnection(srcConn tun.TCPConn, info tun.Metadata) 
 }
 
 func (h *myHandler) HandleUDPConnection(srcConn tun.UDPConn, info tun.Metadata) error {
-	log.Printf("HandleUDPConnection, src: %s, dst: %s, out iface: %s", info.Source, info.Destination, outboundIface)
+	uid, pid, procName, _ := process.FindProcessName(process.UDP, info.Source.Addr(), int(info.Source.Port()))
+	log.Printf("HandleUDPConnection, src: %s, dst: %s, out iface: %s, uid: %d, pid: %d, proc: %s",
+		info.Source, info.Destination, outboundIface, uid, pid, procName)
 
 	dstConn, err := h.lc.ListenPacket(context.Background(), "udp", "")
 	if err != nil {
