@@ -112,18 +112,18 @@ func (t *GVisor) Start() error {
 	})
 	ipStack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
 
-	udpForwarder := udp.NewForwarder(ipStack, func(request *udp.ForwarderRequest) {
+	udpForwarder := udp.NewForwarder(ipStack, func(request *udp.ForwarderRequest) bool {
 		var wq waiter.Queue
 		endpoint, err := request.CreateEndpoint(&wq)
 		if err != nil {
-			return
+			return true
 		}
 		udpConn := gonet.NewUDPConn(&wq, endpoint)
 		lAddr := udpConn.RemoteAddr()
 		rAddr := udpConn.LocalAddr()
 		if lAddr == nil || rAddr == nil {
 			endpoint.Abort()
-			return
+			return true
 		}
 		go func() {
 			var metadata Metadata
@@ -140,6 +140,7 @@ func (t *GVisor) Start() error {
 				endpoint.Abort()
 			}
 		}()
+		return true
 	})
 	ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)
 
